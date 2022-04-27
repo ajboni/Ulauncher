@@ -4,8 +4,7 @@ from inspect import signature
 
 from ulauncher.api.shared.Response import Response
 from ulauncher.api.shared.action.BaseAction import BaseAction
-from ulauncher.api.shared.event import KeywordQueryEvent, ItemEnterEvent, SystemExitEvent, \
-    PreferencesEvent, PreferencesUpdateEvent
+from ulauncher.api.shared.event import KeywordQueryEvent, ItemEnterEvent, UnloadEvent, PreferencesEvent
 from ulauncher.api.client.EventListener import EventListener
 from ulauncher.api.client.Client import Client
 from ulauncher.api.client.setup_logging import setup_logging, get_extension_name
@@ -28,12 +27,10 @@ class Extension:
             self.subscribe(KeywordQueryEvent, self, 'on_query_change')
         if self.__class__.on_item_enter is not Extension.on_item_enter:
             self.subscribe(ItemEnterEvent, self, 'on_item_enter')
-        if self.__class__.on_system_exit is not Extension.on_system_exit:
-            self.subscribe(SystemExitEvent, self, 'on_system_exit')
         if self.__class__.on_preferences is not Extension.on_preferences:
             self.subscribe(PreferencesEvent, self, 'on_preferences')
-        if self.__class__.on_preferences_update is not Extension.on_preferences_update:
-            self.subscribe(PreferencesUpdateEvent, self, 'on_preferences_update')
+        if self.__class__.on_unload is not Extension.on_unload:
+            self.subscribe(UnloadEvent, self, 'on_unload')
 
     def subscribe(self, event_type, event_listener, method='on_event'):
         """
@@ -78,7 +75,6 @@ class Extension:
         Subscribes to events and connects to Ulauncher WS server
         """
         self.subscribe(PreferencesEvent, PreferencesEventListener())
-        self.subscribe(PreferencesUpdateEvent, PreferencesUpdateEventListener())
         self._client.connect()
 
     def on_query_change(self, event):
@@ -87,13 +83,10 @@ class Extension:
     def on_item_enter(self, event):
         pass
 
-    def on_system_exit(self, event):
-        pass
-
     def on_preferences(self, event):
         pass
 
-    def on_preferences_update(self, event):
+    def on_unload(self, event):
         pass
 
 
@@ -102,9 +95,3 @@ class PreferencesEventListener(EventListener):
 
     def on_event(self, event, extension):
         extension.preferences.update(event.preferences)
-
-
-class PreferencesUpdateEventListener(EventListener):
-
-    def on_event(self, event, extension):
-        extension.preferences[event.id] = event.new_value

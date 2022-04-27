@@ -84,7 +84,7 @@ class ItemEnterEvent(BaseEvent):
         return loads(self._data)
 
 
-class SystemExitEvent(BaseEvent):
+class UnloadEvent(BaseEvent):
     """
     Is triggered when extension is about to be terminated.
 
@@ -95,21 +95,8 @@ class SystemExitEvent(BaseEvent):
 
 class PreferencesUpdateEvent(BaseEvent):
     """
-    Is triggered when user updates preference through Preferences window
-
-    :param str id:
-    :param str old_value:
-    :param str new_value:
+    PreferencesUpdateEvent is removed. Exists only for backward compatibility
     """
-
-    id = None
-    old_value = None
-    new_value = None
-
-    def __init__(self, id, old_value, new_value):
-        self.id = id
-        self.old_value = old_value
-        self.new_value = new_value
 
 
 class PreferencesEvent(BaseEvent):
@@ -123,3 +110,7 @@ class PreferencesEvent(BaseEvent):
 
     def __init__(self, preferences):
         self.preferences = preferences
+
+
+# Alias of UnloadEvent for backward compatibility. Please use UnloadEvent (or extension.on_unload) instead
+SystemExitEvent = UnloadEvent
