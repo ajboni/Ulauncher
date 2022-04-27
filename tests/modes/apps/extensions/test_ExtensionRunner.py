@@ -3,9 +3,6 @@ import pytest
 import signal
 
 from ulauncher.modes.extensions.ExtensionRunner import ExtensionRunner, ExtRunErrorName, ExtensionIsNotRunningError
-from ulauncher.modes.extensions.ExtensionServer import ExtensionServer
-from ulauncher.modes.extensions.ExtensionManifest import ExtensionManifestError
-from ulauncher.api.shared.errors import ErrorName
 
 
 class TestExtensionRunner:
@@ -17,24 +14,12 @@ class TestExtensionRunner:
         return thisrunner
 
     @pytest.fixture(autouse=True)
-    def find_extensions(self, mocker):
-        return mocker.patch('ulauncher.modes.extensions.ExtensionRunner.find_extensions')
-
-    @pytest.fixture(autouse=True)
     def timer(self, mocker):
         return mocker.patch('ulauncher.modes.extensions.ExtensionRunner.timer')
 
     @pytest.fixture(autouse=True)
     def get_options(self, mocker):
         return mocker.patch('ulauncher.modes.extensions.ExtensionRunner.get_options')
-
-    @pytest.fixture(autouse=True)
-    def ExtensionManifest(self, mocker):
-        return mocker.patch('ulauncher.modes.extensions.ExtensionRunner.ExtensionManifest')
-
-    @pytest.fixture
-    def manifest(self, ExtensionManifest):
-        return ExtensionManifest.open.return_value
 
     @pytest.fixture
     def SubprocessLauncher(self, mocker):
@@ -52,28 +37,13 @@ class TestExtensionRunner:
     def time(self, mocker):
         return mocker.patch('ulauncher.modes.extensions.ExtensionRunner.time')
 
-    def test_run__incompatible_version__exception_is_raised(self, runner, manifest):
-        manifest.check_compatibility.side_effect = ExtensionManifestError(
-            'message', ErrorName.ExtensionCompatibilityError)
-        with pytest.raises(ExtensionManifestError):
-            runner.run('id')
-
-    def test_run__basic_execution__is_called(self, runner, ExtensionManifest, SubprocessLauncher, DataInputStream):
+    def test_run__basic_execution__is_called(self, runner, SubprocessLauncher, DataInputStream):
         extid = 'id'
         runner.run(extid)
-        ExtensionManifest.open.assert_called_with(extid)
         SubprocessLauncher.new.assert_called_once()
         extproc = runner.extension_procs[extid]
         extproc.subprocess.wait_async.assert_called_once()
         extproc.error_stream.read_line_async.assert_called_once()
-
-    def test_run_all__run__called_with_extension_ids(self, runner, mocker, find_extensions):
-        mocker.patch.object(runner, 'run')
-        find_extensions.return_value = [('id_1', 'path_1'), ('id_2', 'path_2'), ('id_3', 'path_3')]
-        runner.run_all()
-        runner.run.assert_any_call('id_1')
-        runner.run.assert_any_call('id_2')
-        runner.run.assert_any_call('id_3')
 
     def test_set_extension_error(self, runner):
         runner.set_extension_error('id_1', ExtRunErrorName.Terminated, 'message')

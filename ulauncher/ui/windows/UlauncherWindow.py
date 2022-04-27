@@ -98,8 +98,6 @@ class UlauncherWindow(Gtk.ApplicationWindow):
             GLib.idle_add(self.bind_hotkey, accel_name)
 
         ExtensionServer.get_instance().start()
-        time.sleep(0.01)
-        ExtensionRunner.get_instance().run_all()
         if not get_options().no_extensions:
             ExtensionDownloader.get_instance().download_missing()
 
@@ -340,6 +338,8 @@ class UlauncherWindow(Gtk.ApplicationWindow):
         """Override the hide method to ensure the pointer grab is released."""
         if self.settings.get_property('grab-mouse-pointer'):
             self.get_pointer_device().ungrab(0)
+        ExtensionRunner.get_instance().stop_all()
+        
         super().hide(*args, **kwargs)
 
     def get_pointer_device(self):

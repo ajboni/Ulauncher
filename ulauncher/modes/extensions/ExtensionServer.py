@@ -92,16 +92,12 @@ class ExtensionServer:
         """
         return self.controllers.values()
 
-    def get_controller_by_keyword(self, keyword):
+    def get_controller(self, id):
         """
-        :param str keyword:
+        :param str id:
         :rtype: ~ulauncher.modes.extensions.ExtensionController.ExtensionController
         """
-        for _, ctl in self.controllers.items():
-            if keyword in ctl.preferences.get_active_keywords():
-                return ctl
-
-        return None
+        return self.controllers.get(id)
 
 
 class ServerIsRunningError(RuntimeError):

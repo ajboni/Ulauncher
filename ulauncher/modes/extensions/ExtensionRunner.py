@@ -13,9 +13,7 @@ from ulauncher.config import EXTENSIONS_DIR, ULAUNCHER_APP_DIR, get_options
 from ulauncher.utils.mypy_extensions import TypedDict
 from ulauncher.utils.decorator.singleton import singleton
 from ulauncher.utils.timer import timer
-from ulauncher.modes.extensions.ExtensionManifest import ExtensionManifest
 from ulauncher.modes.extensions.ProcessErrorExtractor import ProcessErrorExtractor
-from ulauncher.modes.extensions.extension_finder import find_extensions
 
 logger = logging.getLogger(__name__)
 
@@ -52,63 +50,46 @@ class ExtensionRunner:
         self.dont_run_extensions = get_options().no_extensions
         self.verbose = get_options().verbose
 
-    def run_all(self):
-        """
-        Finds all extensions in `EXTENSIONS_DIR` and runs them
-        """
-        for ex_id, _ in find_extensions(self.extensions_dir):
-            try:
-                self.run(ex_id)
-            # pylint: disable=broad-except
-            except Exception as e:
-                logger.error("Couldn't run '%s'. %s: %s", ex_id, type(e).__name__, e)
-
     def run(self, extension_id):
         """
         * Validates manifest
         * Runs extension in a new process
         """
-        if self.is_running(extension_id):
-            raise ExtensionIsRunningError(f"Extension ID: {extension_id}")
+        if not self.is_running(extension_id):
+            cmd = [sys.executable, os.path.join(self.extensions_dir, extension_id, 'main.py')]
+            env = {}
+            env['PYTHONPATH'] = ':'.join(filter(bool, [ULAUNCHER_APP_DIR, os.getenv('PYTHONPATH')]))
 
-        manifest = ExtensionManifest.open(extension_id)
-        manifest.validate()
-        manifest.check_compatibility()
+            if self.verbose:
+                env['VERBOSE'] = '1'
 
-        cmd = [sys.executable, os.path.join(self.extensions_dir, extension_id, 'main.py')]
-        env = {}
-        env['PYTHONPATH'] = ':'.join(filter(bool, [ULAUNCHER_APP_DIR, os.getenv('PYTHONPATH')]))
+            if self.dont_run_extensions:
+                args = [env.get('VERBOSE', ''), env['PYTHONPATH']]
+                args.extend(cmd)
+                run_cmd = 'VERBOSE={} PYTHONPATH={} {} {}'.format(*args)
+                logger.warning('Copy and run the following command to start %s', extension_id)
+                logger.warning(run_cmd)
+                self.set_extension_error(extension_id, ExtRunErrorName.NoExtensionsFlag, run_cmd)
+                return
 
-        if self.verbose:
-            env['VERBOSE'] = '1'
+            launcher = Gio.SubprocessLauncher.new(Gio.SubprocessFlags.STDERR_PIPE)
+            for env_name, env_value in env.items():
+                launcher.setenv(env_name, env_value, True)
 
-        if self.dont_run_extensions:
-            args = [env.get('VERBOSE', ''), env['PYTHONPATH']]
-            args.extend(cmd)
-            run_cmd = 'VERBOSE={} PYTHONPATH={} {} {}'.format(*args)
-            logger.warning('Copy and run the following command to start %s', extension_id)
-            logger.warning(run_cmd)
-            self.set_extension_error(extension_id, ExtRunErrorName.NoExtensionsFlag, run_cmd)
-            return
+            t_start = time()
+            subproc = launcher.spawnv(cmd)
+            error_line_str = Gio.DataInputStream.new(subproc.get_stderr_pipe())
+            self.extension_procs[extension_id] = ExtensionProc(
+                extension_id=extension_id,
+                subprocess=subproc,
+                start_time=t_start,
+                error_stream=error_line_str,
+                recent_errors=deque(maxlen=1)
+            )
+            logger.debug("Launched %s using Gio.Subprocess", extension_id)
 
-        launcher = Gio.SubprocessLauncher.new(Gio.SubprocessFlags.STDERR_PIPE)
-        for env_name, env_value in env.items():
-            launcher.setenv(env_name, env_value, True)
-
-        t_start = time()
-        subproc = launcher.spawnv(cmd)
-        error_line_str = Gio.DataInputStream.new(subproc.get_stderr_pipe())
-        self.extension_procs[extension_id] = ExtensionProc(
-            extension_id=extension_id,
-            subprocess=subproc,
-            start_time=t_start,
-            error_stream=error_line_str,
-            recent_errors=deque(maxlen=1)
-        )
-        logger.debug("Launched %s using Gio.Subprocess", extension_id)
-
-        subproc.wait_async(None, self.handle_wait, extension_id)
-        self.read_stderr_line(self.extension_procs[extension_id])
+            subproc.wait_async(None, self.handle_wait, extension_id)
+            self.read_stderr_line(self.extension_procs[extension_id])
 
     def read_stderr_line(self, extproc):
         extproc.error_stream.read_line_async(
@@ -188,6 +169,11 @@ class ExtensionRunner:
 
         timer(0.5, partial(self.confirm_termination, extproc))
 
+    def stop_all(self):
+        while len(self.extension_procs):
+            ext_id = list(self.extension_procs)[0]
+            self.stop(ext_id)
+
     def confirm_termination(self, extproc):
         if extproc.subprocess.get_identifier():
             logger.info("Extension %s still running, sending SIGKILL", extproc.extension_id)
@@ -207,10 +193,6 @@ class ExtensionRunner:
 
     def get_extension_error(self, extension_id: str) -> Optional[ExtRunError]:
         return self.extension_errors.get(extension_id)
-
-
-class ExtensionIsRunningError(RuntimeError):
-    pass
 
 
 class ExtensionIsNotRunningError(RuntimeError):
