@@ -115,11 +115,12 @@ class ExtensionRunner:
         subprocess.wait_finish(result)
         if subprocess.get_if_signaled():
             code = subprocess.get_term_sig()
-            error_msg = f'Extension "{extension_id}" was terminated with code {code}'
-            logger.error(error_msg)
-            self.set_extension_error(extension_id, ExtRunErrorName.Terminated, error_msg)
-            self.extension_procs.pop(extension_id, None)
-            return
+            if code != 15:
+                error_msg = f'Extension "{extension_id}" was terminated with code {code}'
+                logger.error(error_msg)
+                self.set_extension_error(extension_id, ExtRunErrorName.Terminated, error_msg)
+                self.extension_procs.pop(extension_id, None)
+                return
 
         extproc = self.extension_procs.get(extension_id)
         if not extproc or id(extproc.subprocess) != id(subprocess):
